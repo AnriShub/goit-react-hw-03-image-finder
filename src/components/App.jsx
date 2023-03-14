@@ -1,4 +1,5 @@
 import React, { Component } from 'react';
+import { toast } from 'react-toastify'
 import { fetchImages } from 'components/api/fetchImages';
 import { Searchbar } from 'components/Searchbar/Searchbar.jsx';
 import { ImageGallery } from 'components/ImageGallery/ImageGallery.jsx';
@@ -11,52 +12,45 @@ export class App extends Component {
     status: 'idle',
     gallery: [],
     page: 1,
-    forFetch: true,
+    loadflag: true,
   }
 
   onSubmit = query => {
-    this.setState({ query, status: 'resolved' })
+    this.setState({ gallery: [], loadflag: false, query, status: 'resolved' })
   }
 
   componentDidUpdate = async (_, prevState) => {
     const prevQuery = prevState.query;
     const nextQuery = this.state.query;
-    const currPage = nextQuery !== this.state.query ? 1 : this.state.page;
-    const forFetch = this.state.forFetch;
-    if (forFetch || prevQuery !== nextQuery) {
+    const currPage = nextQuery !== prevQuery ? 1 : this.state.page;
+    const loadflag = this.state.loadflag;
+    
+    if (loadflag || prevQuery !== nextQuery) {
       this.setState({ status: 'pending' })
-      let newState = null;
       try {
-        newState = await fetchImages(nextQuery, currPage).then(({ total, hits, error }) => {
+        await fetchImages(nextQuery, currPage).then(({ total, hits }) => {
           if (total > 0) {
-            this.setState({ status: 'resolved' })
-            return {
-              gallery: !(prevQuery !== nextQuery) ? [...prevState.gallery, ...hits] : [...hits],
-              query: nextQuery, forFetch: false, page: currPage,
-            };
-          }
-          this.setState({ gallery: [], page: 1, forFetch: false, query: '', status: 'idle' });
-        })
+            this.setState({gallery: !loadflag ? [...hits] : [...prevState.gallery, ...hits], 
+            query: nextQuery, loadflag: false, page: currPage, status: 'resolved'})
+          } else {
+            this.setState({ status: 'idle' })
+            toast.error('No images found!')}
+            })
       } catch (error) {
         this.setState({ status: 'rejected' })
       }
-      
-      this.setState(newState);
     }
   }
 
-  loadMoreClick = () => {
-    this.setState(prevState => ({ page: prevState.page + 1, forFetch: true }));
-    }
+  loadflagClick = () => {this.setState(prevState => ({ page: prevState.page + 1, loadflag: true }))}
 
   render() {
     const { query, gallery } = this.state;
     console.log(gallery.length);
     return (<div>
       <Searchbar onSubmit={this.onSubmit} />
-      {this.state.status === 'idle' && (<div >{query && <h1> {query} not found</h1>}</div>)}
       <ImageGallery gallery={gallery} />
-      {(!(gallery.length % 12) && (gallery.length > 0)) && <Button onClick={this.loadMoreClick} />}
+      {(!(gallery.length % 12) && (gallery.length > 0)) && <Button onClick={this.loadflagClick} />}
       {this.state.status === 'rejected' && <div >{this.state.lastMessage}</div>}
       {this.state.status === 'pending' && <Loader query={query} />}
     </div>
